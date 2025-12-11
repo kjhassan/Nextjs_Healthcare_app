@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: healthcare
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    ports:
+      - 6379:6379
+
+  auth-service:
+    build: ./services/auth-service
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/healthcare
+      JWT_SECRET: supersecret_jwt_change_in_prod
+    depends_on:
+      - postgres
+    ports:
+      - 4000:4000
+
+  appointment-service:
+    build: ./services/appointment-service
+    environment:
+      PORT: 4001
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/healthcare
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: supersecret_jwt_change_in_prod
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - 4001:4001
+
+  notification-service:
+    build: ./services/notification-service
+    environment:
+      PORT: 4002
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/healthcare
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - 4002:4002
+
+  frontend:
+    build: ./frontend
+    environment:
+      # PUBLIC URLs (used by browser/client-side code)
+      # keep these as localhost so the browser can reach the services
+      NEXT_PUBLIC_AUTH_URL: http://localhost:4000
+      NEXT_PUBLIC_APPT_URL: http://localhost:4001
+      NEXT_PUBLIC_NOTIFICATION_URL: http://localhost:4002
+      # INTERNAL URLs (used by server-side code running inside the Next.js container)
+      INTERNAL_AUTH_URL: http://auth-service:4000
+      INTERNAL_APPT_URL: http://appointment-service:4001
+      INTERNAL_NOTIFICATION_URL: http://notification-service:4002
+    ports:
+      - 3000:3000
+    depends_on:
+      - auth-service
+      - appointment-service
+      - notification-service
+
+volumes:
+  pgdata:
